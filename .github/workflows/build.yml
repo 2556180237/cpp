@@ -1,0 +1,46 @@
+name: Build and Generate Images
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022, macos-12]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure (CMake)
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release -j
+
+      - name: Run binary to generate images (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: ./build/draw
+
+      - name: Run binary to generate images (Windows)
+        if: runner.os == 'Windows'
+        run: .\build\Release\draw.exe
+
+      - name: Upload generated images
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: images-${{ matrix.os }}-${{ github.run_number }}
+          path: |
+            result/**
+            *.ppm
+            *.pgm
+          if-no-files-found: warn
+
+
