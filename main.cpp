@@ -8,8 +8,13 @@
 #include "Circle.hpp"
 #include "Triangle.hpp"
 
-// Removed ImageMagick dependency – PNG is generated internally
-
+/*
+English: Render RGB "house" into provided matrix.
+Русский: Отрисовка RGB «дом» в переданную матрицу.
+Pseudocode:
+  prepare shapes (sky, grass, sun, rays, walls, roof, door, windows)
+  draw them to rgb in order
+*/
 static void renderRgbTo(RGBMatrix &rgb) {
 	RGBColor rgbColor(102, 205, 255);
 	Rectangle sky({0, 0}, 2000, 1500, rgbColor);
@@ -49,6 +54,14 @@ static void renderRgbTo(RGBMatrix &rgb) {
 	rgb.draw(window2);
 }
 
+/*
+English: Render BW  "mushroom" into provided matrix.
+Русский: Отрисовка ЧБ «гриб» в переданную матрицу.
+Pseudocode:
+  choose grayscale colors
+  build shapes (cap, background pieces, stipe, bottom)
+  draw to bw in order
+*/
 static void renderBwTo(BWMatrix &bw) {
 	int bgColor = 255;
 	int capColor = 179;
@@ -74,6 +87,13 @@ static void renderBwTo(BWMatrix &bw) {
 	bw.draw(background3);
 }
 
+/*
+English: Build both scenes entirely in memory (no file IO); used for benchmarks.
+Русский: Строю обе сцены в памяти без IO; используется для бенчмарка.
+Pseudocode:
+  allocate RGBMatrix; renderRgbTo
+  allocate BWMatrix;  renderBwTo
+*/
 static void renderScenesNoIO() {
 	RGBMatrix rgb(2000, 2000, {0, 0, 0});
 	renderRgbTo(rgb);
@@ -81,8 +101,16 @@ static void renderScenesNoIO() {
 	renderBwTo(bw);
 }
 
+/*
+English: Entry point. Optional benchmark mode (--bench N). Otherwise renders and exports PNGs.
+Русский: Точка входа. Опциональный режим бенчмарка (--bench N). Иначе отрисовка и экспорт PNG.
+Pseudocode:
+  if args contain --bench:
+    parse N; time N times renderScenesNoIO; compute score; print; exit
+  else:
+    render RGB/BW; (legacy display may no-op) ; ensure result/ ; save 2 PNGs
+*/
 int main(int argc, char** argv) {
-    // Benchmark mode: --bench [iters]
 	if (argc >= 2 && std::string(argv[1]) == "--bench") {
 		int iters = 3;
 		if (argc >= 3) {
@@ -128,12 +156,10 @@ int main(int argc, char** argv) {
 		bw.display();
 	}
 
-    // Prepare output: create result folder, save PNG only
+    // Prepare output: create result folder
 	try {
 		namespace fs = std::filesystem;
 		fs::create_directory("result");
-
-                // Create PNG directly without intermediate PPM/PGM
 		{
 			RGBMatrix rgb(2000, 2000, {0, 0, 0});
 			renderRgbTo(rgb);

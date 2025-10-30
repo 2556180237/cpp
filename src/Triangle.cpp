@@ -11,11 +11,9 @@ Triangle::Triangle(Point a, Point b, Point c, const RGBColor& color)
 	: Shape(color) {
 	fill(a, b, c);
 }
-
 float Triangle::area(Point a, Point b, Point c) {
 	return 0.5f * std::abs(a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
 }
-
 void Triangle::fill(Point a, Point b, Point c) {
 	int minX = std::min({a.x, b.x, c.x});
 	int maxX = std::max({a.x, b.x, c.x});

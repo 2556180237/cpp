@@ -1,6 +1,5 @@
 #include "Circle.hpp"
 #include <cmath>
-
 Circle::Circle(Point center, int radius, const BWColor& color)
 	: Shape(color) {
 	fill(center, radius);
@@ -10,7 +9,6 @@ Circle::Circle(Point center, int radius, const RGBColor& color)
 	: Shape(color) {
 	fill(center, radius);
 }
-
 void Circle::fill(Point c, int r) {
 	if (r <= 0) return;
 	int xmin = c.x - r;

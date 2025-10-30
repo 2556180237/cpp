@@ -13,11 +13,21 @@ static bool run(const std::string &cmd) {
 	return rc == 0;
 }
 
+/*
+English (func): compareWithMetricAE — decode two PNGs, count pixel differences, write visual diff.
+Русский (функция): compareWithMetricAE — декодирует два PNG, подсчитывает отличающиеся пиксели, сохраняет визуальный дифф.
+Pseudocode:
+  decode expected -> exp, actual -> act
+  if decode fails: return false
+  diffPixels = compare(exp, act)
+  if diffPixels>0:
+    create diff image WxH (max dims); paint black; mark mismatches red; save
+  return true
+*/
 static bool compareWithMetricAE(const fs::path &expected,
 		const fs::path &actual,
 		const fs::path &diffOut,
 		long long &diffPixels) {
-    // Load images via PNG decoder
 	PngCodec::Image expImg, actImg;
 	
 	if (!PngCodec::decode(expected.string(), expImg)) {
@@ -31,15 +41,11 @@ static bool compareWithMetricAE(const fs::path &expected,
 		return false;
 	}
 	
-    // Compare pixels
 	diffPixels = PngCodec::compare(expImg, actImg);
 	
-    // If there are differences, create a diff image
 	if (diffPixels > 0) {
 		PngCodec::Image diffImg(std::max(expImg.width, actImg.width), 
 		                       std::max(expImg.height, actImg.height));
-		
-        // Fill black background
 		for (uint32_t y = 0; y < diffImg.height; ++y) {
 			for (uint32_t x = 0; x < diffImg.width; ++x) {
 				diffImg.r(x, y) = 0;
@@ -47,8 +53,6 @@ static bool compareWithMetricAE(const fs::path &expected,
 				diffImg.b(x, y) = 0;
 			}
 		}
-		
-        // Mark differences in red
 		uint32_t minWidth = std::min(expImg.width, actImg.width);
 		uint32_t minHeight = std::min(expImg.height, actImg.height);
 		
@@ -57,20 +61,22 @@ static bool compareWithMetricAE(const fs::path &expected,
 				if (expImg.r(x, y) != actImg.r(x, y) ||
 				    expImg.g(x, y) != actImg.g(x, y) ||
 				    expImg.b(x, y) != actImg.b(x, y)) {
-                    diffImg.r(x, y) = 255; // red for differences
+                    diffImg.r(x, y) = 255;
 					diffImg.g(x, y) = 0;
 					diffImg.b(x, y) = 0;
 				}
 			}
 		}
-		
-        // Save diff image
 		PngCodec::encode(diffOut.string(), diffImg);
 	}
 	
 	return true;
 }
 
+/*
+English (main): ensure folders exist, iterate pairs, compare and print result; exit code 0/1.
+Русский (main): чекнуть папки, пройтись по параметрам, сравнить и вывести результат; код возврата булевый 0/1.
+*/
 int main() {
 	fs::path examples = "examples";
 	fs::path result = "result";

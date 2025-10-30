@@ -8,9 +8,18 @@
 #include <zlib.h>
 #endif
 
-// --- Minimal DEFLATE inflate (fixed Huffman + stored blocks) for NO_ZLIB builds ---
+/*
+English (module): PngCodec — minimal PNG encoder/decoder (RGB8 / RGBA8 input), with optional zlib.
+Русский (модуль): PngCodec — минимальный PNG кодер/декодер (RGB8 / RGBA8), опционально с zlib.
+*/
+
+// --- Minimal DEFLATE inflate (stored blocks; stub for fixed) for NO_ZLIB builds ---
 #ifndef HAVE_ZLIB
 namespace {
+    /*
+    English: BitStream — little‑endian bit reader used by DEFLATE.
+    Русский: BitStream — побитовый ридер (LSB‑first) для DEFLATE.
+    */
     struct BitStream {
         const uint8_t* data; size_t size; size_t bytePos; uint32_t bitBuf; int bitCnt;
         BitStream(const std::vector<uint8_t>& v) : data(v.data()), size(v.size()), bytePos(0), bitBuf(0), bitCnt(0) {}
@@ -58,6 +67,10 @@ namespace {
         return -2;
     }
 
+    /*
+    English: Inflate stored (and placeholder for fixed) blocks from input to output.
+    Русский: Распаковать stored‑блоки (и заглушка для fixed) из входа в выход.
+    */
     bool inflateFixedAndStored(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) {
         BitStream bs(in);
         // zlib header may be present (two bytes). Check for typical 0x78** and skip if matches.
@@ -96,6 +109,10 @@ namespace {
 }
 #endif
 
+/*
+English: CRC32 table and helpers (writeUint32BE, chunks, adler32, crc32_update).
+Русский: Таблица CRC32 и вспомогательные функции (writeUint32BE, чанки, adler32, crc32_update).
+*/
 // CRC32 table for fast calculation
 static const uint32_t crc32_table[256] = {
     0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f,
@@ -222,6 +239,18 @@ bool PngCodec::compressData(const uint8_t* data, size_t len, std::vector<uint8_t
 #endif
 }
 
+/*
+English (encode): Build PNG: write signature, IHDR, filtered scanlines (filter 0), compress (zlib if present), IDAT, IEND.
+Русский (encode): Собрать PNG: сигнатура, IHDR, строки с фильтром 0, сжать (если есть zlib), IDAT, IEND.
+Pseudocode:
+  if invalid image: return false
+  pngData = signature
+  ihdr = (w,h,8bit,RGB,0,0,0); chunk(IHDR, ihdr)
+  filtered = join([0] + rowRGB) for each row
+  compressed = deflate(filtered) or copy
+  chunk(IDAT, compressed); chunk(IEND, none)
+  write file
+*/
 bool PngCodec::encode(const std::string& filename, const Image& image) {
     if (image.width == 0 || image.height == 0 || image.data.empty()) {
         return false;
@@ -279,6 +308,14 @@ bool PngCodec::encode(const std::string& filename, const Image& image) {
     return file.good();
 }
 
+/*
+English (decode): Read PNG file, parse chunks, collect IDAT, inflate, undo filter 0, output RGB.
+Русский (decode): Прочитать PNG, распарсить чанки, собрать IDAT, распаковать, снять фильтр 0, выдать RGB.
+Pseudocode:
+  read file; check signature
+  for each chunk: if IHDR => dims/type; if IDAT => append; if IEND => break
+  determine channels (RGB/RGBA), inflate, for each row: expect filter=0; copy RGB (drop A)
+*/
 bool PngCodec::decode(const std::string& filename, Image& image) {
     std::ifstream file(filename, std::ios::binary);
     if (!file.is_open()) {
@@ -391,20 +428,17 @@ bool PngCodec::decode(const std::string& filename, Image& image) {
     
     inflateEnd(&strm);
 #else
-    // Use minimal inflater: supports stored blocks; returns false for unsupported blocks
     if (!inflateFixedAndStored(compressedData, decompressed)) {
         return false;
     }
 #endif
     
-    // Remove filters and convert to RGB
     size_t outPos = 0;
     for (uint32_t y = 0; y < image.height; ++y) {
         size_t rowStart = y * (image.width * channels + 1);
         uint8_t filterType = decompressed[rowStart];
         
         if (filterType != 0) {
-            // Only filter type 0 (None) is supported
             return false;
         }
         
@@ -420,6 +454,10 @@ bool PngCodec::decode(const std::string& filename, Image& image) {
     return true;
 }
 
+/*
+English (compare): If sizes differ => UINT64_MAX, else count RGB pixel mismatches.
+Русский (compare): Если размеры различаются — UINT64_MAX, иначе посчитать отличающиеся пиксели.
+*/
 uint64_t PngCodec::compare(const Image& img1, const Image& img2) {
     if (img1.width != img2.width || img1.height != img2.height) {
         return UINT64_MAX; // Different sizes

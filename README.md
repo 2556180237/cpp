@@ -1,36 +1,40 @@
-# Drawing Shapes to an Image Matrix (PNG only)
+# Draw (C++) — рендер фигур в матрицу с экспортом в PNG
 
-C++ project that renders simple shapes (rectangle, circle, triangle) into 2D matrices and saves final images as PNG. PNG encoding/decoding is implemented internally (no external tools).
+Проект рисует простые фигуры (прямоугольник, круг, треугольник) в двумерные матрицы и сохраняет результат только в PNG. Генерация PNG реализована внутри проекта (без ImageMagick и прочих утилит), декодер используется в тестовом инструменте сравнения изображений.
 
-## Features
-- RGB scene "house" → `result/house.png`
-- BW scene "mushroom" → `result/mushroom.png`
-- Internal PNG encoder/decoder (`include/PngCodec.hpp`, `src/PngCodec.cpp`)
-- Image diff tool: compares `result/*.png` against `examples/*.png`
-- Optional zlib compression (used if found); works without it as well
-- Cross-platform CMake build; cross-compilation toolchains provided
+## Возможности
+- Готовые сцены:
+  - RGB «house» → `result/house.png`
+  - BW «mushroom» → `result/mushroom.png`
+- Встроенный PNG‑кодек (`include/PngCodec.hpp`, `src/PngCodec.cpp`):
+  - кодирование RGB8 в PNG (с `zlib`, если доступен; без него — совместимый поток хранения)
+  - декодирование PNG в RGB8 (на Windows в CI — `zlib` через vcpkg)
+- Сравнение изображений: `test/diff.cpp` сравнивает `examples/*.png` и `result/*.png`, создаёт диффы `test/diff_*.png`
+- Бенчмарк рендера без IO: `--bench N` (CI сохраняет логи бенчмарка)
+- Кроссплатформенная сборка CMake; CI‑матрица Ubuntu/Windows/macOS
 
-## Project structure
-- `include/` headers: `Color.hpp`, `Shape.hpp`, `Matrix.hpp`, `Circle.hpp`, `Rectangle.hpp`, `Triangle.hpp`, `PngCodec.hpp`
-- `src/` sources (including `PngCodec.cpp`)
-- `main.cpp` entry point
-- `test/diff.cpp` image comparison tool
-- `scripts/` build helpers
+## Структура
+- `include/` — `Color.hpp`, `Shape.hpp`, `Matrix.hpp`, `Circle.hpp`, `Rectangle.hpp`, `Triangle.hpp`, `PngCodec.hpp`
+- `src/` — реализации, включая `PngCodec.cpp`
+- `main.cpp` — входная точка (сцены, бенчмарк, экспорт PNG)
+- `test/diff.cpp` — сравнение PNG и генерация diff‑изображений
+- `examples/` — эталонные PNG для сравнения
+- `scripts/` — скрипты сборки: `build-linux.sh`, `build-windows.ps1`, `build-macos.sh`
+- `.github/workflows/build.yml` — CI (GitHub Actions)
 
-## Build
-Requires CMake >= 3.12 and a C++17 compiler.
+## Сборка
+Требуется: CMake ≥ 3.12, компилятор C++17.
 
 ### Linux (native)
 ```bash
 ./scripts/build-linux.sh
 ./build-linux/draw
-# Images will appear in ./result
+# PNG появятся в ./result
 ```
 
 ### Windows (native, PowerShell)
 ```powershell
 ./scripts/build-windows.ps1
-# Run
 ./build-win/Release/draw.exe
 ```
 
@@ -40,51 +44,49 @@ Requires CMake >= 3.12 and a C++17 compiler.
 ./build/macos/draw
 ```
 
-## Cross-compilation from Linux (optional)
-Toolchains are provided under `cmake/toolchains/`.
-- Windows: MinGW-w64 (`cmake/toolchains/mingw64.cmake`)
-- macOS: osxcross (`cmake/toolchains/osxcross.cmake`)
-
-Example (Windows):
+## Использование
 ```bash
-sudo apt-get install -y mingw-w64
-cmake -S . -B build-win64 -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw64.cmake
-cmake --build build-win64 --config Release -j
-```
+# Генерация PNG
+./build-linux/draw                 # Linux
+./build-win/Release/draw.exe       # Windows
+./build/macos/draw                 # macOS
 
-## Usage
-After building `draw`:
-```bash
-./build-linux/draw           # Linux
-./build-win/Release/draw.exe # Windows
-./build/macos/draw           # macOS
+# Бенчмарк без IO
+./build-linux/draw --bench 10
 ```
-Outputs:
+Выходные файлы:
 - `result/house.png`
 - `result/mushroom.png`
 
-PPM/PGM legacy outputs are disabled by default (`NO_LEGACY_PPM`).
+Вывод PPM/PGM отключён по умолчанию макросом `NO_LEGACY_PPM` (методы `display()` заглушены).
 
-## Image diff
-Builds alongside main binary:
+## Сравнение изображений
 ```bash
 ./build-linux/imgdiff
-# Compares examples/*.png with result/*.png
-# Creates visual diffs in test/diff_*.png (red pixels mark differences)
+# Сравнивает examples/*.png и result/*.png;
+# создаёт diff‑карты test/diff_*.png (различия отмечены красным)
 ```
+На Windows в CI декодирование PNG обеспечивается установленным через vcpkg `zlib`.
 
-## Benchmark
-Run rendering without IO several times and score performance.
+## Бенчмарк
 ```bash
 ./build-linux/draw --bench 5
 ```
-- Baseline: env `PERF_BASELINE_MS` (default 3000)
-- Score formula: `perf = clamp(baselineMs / avgMs, 0..1.5)`; `score = 7.0 + perf * 2.0` (0..10)
+Параметры и метрики:
+- `--bench N` — число итераций (по умолчанию 3)
+- Эталон: `PERF_BASELINE_MS` (мс), по умолчанию 3000
+- Оценка: `perf = clamp(baselineMs / avgMs, 0..1.5)`; `score = 7.0 + perf * 2.0` в диапазоне [0..10]
 
-## CI
-Workflow: `.github/workflows/build.yml` (matrix: Ubuntu, Windows, macOS). Artifacts upload `result/**` and binaries.
+## CI (GitHub Actions)
+- Матрица: `ubuntu-22.04`, `ubuntu-24.04`, `windows-2022`, `macos-13`, `macos-14`
+- Шаги:
+  - сборка `draw` и `imgdiff`
+  - запуск генерации PNG и отдельный бенчмарк (`--bench 10`), сохранение вывода в `bench-<os>.txt`
+  - запуск `imgdiff` на всех ОС
+  - артефакты: `result/**`, `test/diff_*.png`, бинарники и логи бенчмарка
+- Windows: установка `zlib` через vcpkg (см. `vcpkg.json`, `vcpkg-configuration.json`)
 
-## Notes
-- If zlib is available, PNG is compressed; otherwise, uncompressed deflate stream is used.
-- All code comments are in English. PNG implementation is minimal and focused on 8-bit RGB/RGBA.
+## Примечания
+- PNG реализован для 8‑бит RGB/RGBA, без интерлейсинга; при записи используется фильтр 0
+- При наличии `zlib` IDAT сжимается; без `zlib` используется совместимый поток (stored‑блоки)
+- Комментарии в коде — на английском
