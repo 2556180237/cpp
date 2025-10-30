@@ -21,6 +21,7 @@ result/
 *.ppm
 *.pgm
 *.png
+!examples/*.png
 
 # IDE / Editor files
 .vscode/
