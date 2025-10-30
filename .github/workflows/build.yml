@@ -2,9 +2,9 @@ name: Build and Generate Images
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ master ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ master ]
   workflow_dispatch:
 
 jobs:
@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-2022, macos-12, macos-13, macos-14]
+        os: [ubuntu-22.04, ubuntu-24.04, windows-2019, windows-2022, macos-13, macos-14]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -70,9 +70,19 @@ jobs:
         if: runner.os != 'Windows'
         run: ./build/draw
 
+      - name: Run benchmark (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          ./build/draw --bench 10 | tee bench-${{ matrix.os }}.txt
+
       - name: Run binary to generate images (Windows)
         if: runner.os == 'Windows'
         run: .\build\Release\draw.exe
+
+      - name: Run benchmark (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\build\Release\draw.exe --bench 10 | Tee-Object -FilePath bench-${{ matrix.os }}.txt
 
       - name: Build diff tool
         run: cmake --build build --config Release --target imgdiff -j
@@ -122,6 +132,14 @@ jobs:
             build/CMakeFiles/CMakeError.log
             build/CMakeFiles/**/*.log
           if-no-files-found: ignore
+
+      - name: Upload benchmark logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-${{ matrix.os }}-${{ github.run_number }}
+          path: bench-${{ matrix.os }}.txt
+          if-no-files-found: warn
 
       - name: Upload binaries (Linux/macOS)
         if: runner.os != 'Windows'
