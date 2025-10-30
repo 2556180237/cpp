@@ -12,12 +12,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-2022, macos-12]
+        os: [ubuntu-22.04, windows-2022, macos-12, macos-13, macos-14]
     runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Setup vcpkg (Windows)
+        if: runner.os == 'Windows'
+        uses: microsoft/vcpkg-action@v1
+        with:
+          # Use manifest mode (vcpkg.json in repo)
+          runVcpkgInstall: true
+
 
       # Cache compiler results (ccache) on Linux/macOS
       - name: Install ccache (Linux)
@@ -53,7 +60,7 @@ jobs:
 
       - name: Configure (CMake) (Windows)
         if: runner.os == 'Windows'
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}\\scripts\\buildsystems\\vcpkg.cmake"
 
       - name: Build
         run: cmake --build build --config Release -j
