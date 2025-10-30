@@ -20,9 +20,9 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup vcpkg (Windows)
         if: runner.os == 'Windows'
-        uses: microsoft/vcpkg-action@v1
+        uses: microsoft/setup-vcpkg@v1
         with:
-          # Use manifest mode (vcpkg.json in repo)
+          vcpkgJsonGlob: 'vcpkg.json'
           runVcpkgInstall: true
 
 
