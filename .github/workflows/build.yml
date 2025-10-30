@@ -19,7 +19,40 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure (CMake)
+      # Cache compiler results (ccache) on Linux/macOS
+      - name: Install ccache (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ccache
+
+      - name: Install ccache (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ccache
+
+      - name: Cache ccache
+        if: runner.os != 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/ccache
+            ~/Library/Caches/ccache
+          key: ccache-${{ runner.os }}-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake', 'include/**/*.hpp', 'src/**/*.cpp') }}
+          restore-keys: |
+            ccache-${{ runner.os }}-
+
+      # No external tools required (PNG is generated internally)
+
+      - name: Configure (CMake) with ccache (Linux/macOS)
+        if: runner.os != 'Windows'
+        env:
+          CCACHE_BASEDIR: ${{ github.workspace }}
+          CCACHE_DIR: ${{ runner.os == 'Linux' && '~/.cache/ccache' || runner.os == 'macOS' && '~/Library/Caches/ccache' || '' }}
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+                -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Configure (CMake) (Windows)
+        if: runner.os == 'Windows'
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
@@ -33,6 +66,17 @@ jobs:
         if: runner.os == 'Windows'
         run: .\build\Release\draw.exe
 
+      - name: Build diff tool
+        run: cmake --build build --config Release --target imgdiff -j
+
+      - name: Run image diff (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: ./build/imgdiff
+
+      - name: Run image diff (Windows)
+        if: runner.os == 'Windows'
+        run: .\build\Release\imgdiff.exe
+
       - name: Upload generated images
         if: always()
         uses: actions/upload-artifact@v4
@@ -40,8 +84,38 @@ jobs:
           name: images-${{ matrix.os }}-${{ github.run_number }}
           path: |
             result/**
-            *.ppm
-            *.pgm
+            test/diff_*.png
+          if-no-files-found: warn
+
+      - name: Upload CMake logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cmake-logs-${{ matrix.os }}-${{ github.run_number }}
+          path: |
+            build/CMakeFiles/CMakeOutput.log
+            build/CMakeFiles/CMakeError.log
+            build/CMakeFiles/**/*.log
+          if-no-files-found: ignore
+
+      - name: Upload binaries (Linux/macOS)
+        if: runner.os != 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.os }}-${{ github.run_number }}
+          path: |
+            build/draw
+            build/imgdiff
+          if-no-files-found: warn
+
+      - name: Upload binaries (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.os }}-${{ github.run_number }}
+          path: |
+            build/Release/draw.exe
+            build/Release/imgdiff.exe
           if-no-files-found: warn
 
 
