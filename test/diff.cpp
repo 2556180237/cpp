@@ -12,18 +12,6 @@ static bool run(const std::string &cmd) {
 	int rc = std::system(cmd.c_str());
 	return rc == 0;
 }
-
-/*
-English (func): compareWithMetricAE — decode two PNGs, count pixel differences, write visual diff.
-Русский (функция): compareWithMetricAE — декодирует два PNG, подсчитывает отличающиеся пиксели, сохраняет визуальный дифф.
-Pseudocode:
-  decode expected -> exp, actual -> act
-  if decode fails: return false
-  diffPixels = compare(exp, act)
-  if diffPixels>0:
-    create diff image WxH (max dims); paint black; mark mismatches red; save
-  return true
-*/
 static bool compareWithMetricAE(const fs::path &expected,
 		const fs::path &actual,
 		const fs::path &diffOut,
@@ -72,11 +60,6 @@ static bool compareWithMetricAE(const fs::path &expected,
 	
 	return true;
 }
-
-/*
-English (main): ensure folders exist, iterate pairs, compare and print result; exit code 0/1.
-Русский (main): чекнуть папки, пройтись по параметрам, сравнить и вывести результат; код возврата булевый 0/1.
-*/
 int main() {
 	fs::path examples = "examples";
 	fs::path result = "result";

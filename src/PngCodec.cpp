@@ -8,24 +8,14 @@
 #include <zlib.h>
 #endif
 
-/*
-English (module): PngCodec — minimal PNG encoder/decoder (RGB8 / RGBA8 input), with optional zlib.
-Русский (модуль): PngCodec — минимальный PNG кодер/декодер (RGB8 / RGBA8), опционально с zlib.
-*/
-
-// --- Minimal DEFLATE inflate (stored blocks; stub for fixed) for NO_ZLIB builds ---
 #ifndef HAVE_ZLIB
 namespace {
-    /*
-    English: BitStream — little‑endian bit reader used by DEFLATE.
-    Русский: BitStream — побитовый ридер (LSB‑first) для DEFLATE.
-    */
     struct BitStream {
         const uint8_t* data; size_t size; size_t bytePos; uint32_t bitBuf; int bitCnt;
         BitStream(const std::vector<uint8_t>& v) : data(v.data()), size(v.size()), bytePos(0), bitBuf(0), bitCnt(0) {}
         uint32_t readBits(int n) {
             while (bitCnt < n) {
-                if (bytePos >= size) return 0; // out of data
+                if (bytePos >= size) return 0;
                 bitBuf |= (uint32_t)data[bytePos++] << bitCnt;
                 bitCnt += 8;
             }
@@ -35,47 +25,9 @@ namespace {
         void alignToByte() { bitBuf = 0; bitCnt = 0; }
     };
 
-    // Decode one symbol using fixed Huffman codes per RFC 1951
-    int decodeFixedLitLen(BitStream& bs) {
-        // Fixed codes: 7,8,9 bits depending on value
-        // Implement standard table approach
-        uint32_t peek = bs.readBits(7); // at least 7 bits
-        // 256..279 (7 bits 0000000..0010111): codes 0-23 with 7 bits starting at 256
-        if (peek <= 23) return (int)(peek + 256);
-        // else need more bits; reconstruct
-        // backtrack: we already consumed 7; rebuild by keeping last read state is complex.
-        // Simpler: read bit-by-bit per spec
-        // Re-implement using incremental reading
-        // Reset state by recreating a new helper that can step bits back is hard; instead implement stepwise decoder:
-        // We'll read using known ranges.
-        // Approach: read 8th bit additionally from saved state not possible. So we change strategy:
-        return -1; // signal to fallback slower path
-    }
-
-    int decodeFixedLitLenSlow(BitStream& bs) {
-        // Use bit-by-bit traversal following spec tables
-        // We will reconstruct code by reading up to 9 bits and mapping ranges
-        uint32_t code = bs.readBits(1);
-        // Build up to 9 bits; but mapping is cumbersome; implement known logic:
-        // Read additional bits progressively
-        uint32_t b2 = bs.readBits(1); uint32_t v = (b2 << 1) | code; // 2 bits
-        // For simplicity, read total 9 bits value
-        uint32_t rest = bs.readBits(7); // now 9 bits total with code as LSB-first
-        uint32_t x = (rest << 2) | v; // 9-bit value (LSB-first order).
-        // Map according to fixed tree construction (precomputed mapping is heavy). To keep it minimal,
-        // fallback: reconstruct by brute-force of canonical codes is too long for here.
-        return -2;
-    }
-
-    /*
-    English: Inflate stored (and placeholder for fixed) blocks from input to output.
-    Русский: Распаковать stored‑блоки (и заглушка для fixed) из входа в выход.
-    */
     bool inflateFixedAndStored(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) {
         BitStream bs(in);
-        // zlib header may be present (two bytes). Check for typical 0x78** and skip if matches.
         if (in.size() >= 2 && ((in[0] & 0x0F) == 8)) {
-            // Skip 2-byte zlib header
             bs.bytePos = 2; bs.bitBuf = 0; bs.bitCnt = 0;
         }
         bool last = false;
@@ -83,7 +35,6 @@ namespace {
             last = bs.readBits(1) != 0;
             uint32_t btype = bs.readBits(2);
             if (btype == 0) {
-                // stored block
                 bs.alignToByte();
                 if (bs.bytePos + 4 > bs.size) return false;
                 uint16_t LEN = in[bs.bytePos] | (in[bs.bytePos+1] << 8);
@@ -94,11 +45,8 @@ namespace {
                 out.insert(out.end(), in.begin() + bs.bytePos, in.begin() + bs.bytePos + LEN);
                 bs.bytePos += LEN;
             } else if (btype == 1) {
-                // fixed Huffman - to keep implementation short, we do not implement full table here
-                // Instead, fail and let caller detect unsupported path.
                 return false;
             } else if (btype == 2) {
-                // dynamic Huffman - not supported in mini inflater
                 return false;
             } else {
                 return false;
@@ -109,11 +57,6 @@ namespace {
 }
 #endif
 
-/*
-English: CRC32 table and helpers (writeUint32BE, chunks, adler32, crc32_update).
-Русский: Таблица CRC32 и вспомогательные функции (writeUint32BE, чанки, adler32, crc32_update).
-*/
-// CRC32 table for fast calculation
 static const uint32_t crc32_table[256] = {
     0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f,
     0xe963a535, 0x9e6495a3, 0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
@@ -184,18 +127,11 @@ void PngCodec::writeUint32BE(std::vector<uint8_t>& buffer, uint32_t value) {
 }
 
 void PngCodec::writeChunk(std::vector<uint8_t>& buffer, const char* type, const uint8_t* data, size_t len) {
-    // Chunk length (4 bytes, big-endian)
     writeUint32BE(buffer, static_cast<uint32_t>(len));
-    
-    // Chunk type (4 bytes)
     buffer.insert(buffer.end(), type, type + 4);
-    
-    // Chunk data
     if (data && len > 0) {
         buffer.insert(buffer.end(), data, data + len);
     }
-    
-    // CRC32 (4 bytes, big-endian) for type + data
     uint32_t crc = 0xffffffff;
     crc = crc32_update(crc, reinterpret_cast<const uint8_t*>(type), 4);
     if (data && len > 0) {
@@ -219,7 +155,7 @@ bool PngCodec::compressData(const uint8_t* data, size_t len, std::vector<uint8_t
     strm.avail_in = static_cast<uInt>(len);
     strm.next_in = const_cast<Bytef*>(data);
     
-    compressed.resize(len + 1024); // reserve extra space
+    compressed.resize(len + 1024);
     strm.avail_out = static_cast<uInt>(compressed.size());
     strm.next_out = compressed.data();
     
@@ -233,24 +169,11 @@ bool PngCodec::compressData(const uint8_t* data, size_t len, std::vector<uint8_t
     deflateEnd(&strm);
     return true;
 #else
-    // No zlib available - store uncompressed
     compressed.assign(data, data + len);
     return true;
 #endif
 }
 
-/*
-English (encode): Build PNG: write signature, IHDR, filtered scanlines (filter 0), compress (zlib if present), IDAT, IEND.
-Русский (encode): Собрать PNG: сигнатура, IHDR, строки с фильтром 0, сжать (если есть zlib), IDAT, IEND.
-Pseudocode:
-  if invalid image: return false
-  pngData = signature
-  ihdr = (w,h,8bit,RGB,0,0,0); chunk(IHDR, ihdr)
-  filtered = join([0] + rowRGB) for each row
-  compressed = deflate(filtered) or copy
-  chunk(IDAT, compressed); chunk(IEND, none)
-  write file
-*/
 bool PngCodec::encode(const std::string& filename, const Image& image) {
     if (image.width == 0 || image.height == 0 || image.data.empty()) {
         return false;
@@ -258,47 +181,39 @@ bool PngCodec::encode(const std::string& filename, const Image& image) {
     
     std::vector<uint8_t> pngData;
     
-    // PNG signature
     const uint8_t pngSignature[] = {137, 80, 78, 71, 13, 10, 26, 10};
     pngData.insert(pngData.end(), pngSignature, pngSignature + 8);
     
-    // IHDR chunk
     std::vector<uint8_t> ihdrData;
     ihdrData.reserve(13);
     writeUint32BE(ihdrData, image.width);
     writeUint32BE(ihdrData, image.height);
-    ihdrData.push_back(8);  // Bit depth
-    ihdrData.push_back(2);  // Color type (RGB)
-    ihdrData.push_back(0);  // Compression method
-    ihdrData.push_back(0);  // Filter method
-    ihdrData.push_back(0);  // Interlace method
+    ihdrData.push_back(8);
+    ihdrData.push_back(2);
+    ihdrData.push_back(0);
+    ihdrData.push_back(0);
+    ihdrData.push_back(0);
     writeChunk(pngData, "IHDR", ihdrData.data(), ihdrData.size());
     
-    // Prepare scanlines with filter byte per row (filter 0)
     std::vector<uint8_t> filteredData;
     filteredData.reserve(image.width * image.height * 3 + image.height);
     
     for (uint32_t y = 0; y < image.height; ++y) {
-        filteredData.push_back(0); // Filter type 0 (None)
+        filteredData.push_back(0);
         size_t rowOffset = y * image.width * 3;
         for (uint32_t x = 0; x < image.width * 3; ++x) {
             filteredData.push_back(image.data[rowOffset + x]);
         }
     }
     
-    // Compress image data
     std::vector<uint8_t> compressedData;
     if (!compressData(filteredData.data(), filteredData.size(), compressedData)) {
         return false;
     }
     
-    // IDAT chunk
     writeChunk(pngData, "IDAT", compressedData.data(), compressedData.size());
-    
-    // IEND chunk
     writeChunk(pngData, "IEND", nullptr, 0);
     
-    // Write to file
     std::ofstream file(filename, std::ios::binary);
     if (!file.is_open()) {
         return false;
@@ -308,21 +223,12 @@ bool PngCodec::encode(const std::string& filename, const Image& image) {
     return file.good();
 }
 
-/*
-English (decode): Read PNG file, parse chunks, collect IDAT, inflate, undo filter 0, output RGB.
-Русский (decode): Прочитать PNG, распарсить чанки, собрать IDAT, распаковать, снять фильтр 0, выдать RGB.
-Pseudocode:
-  read file; check signature
-  for each chunk: if IHDR => dims/type; if IDAT => append; if IEND => break
-  determine channels (RGB/RGBA), inflate, for each row: expect filter=0; copy RGB (drop A)
-*/
 bool PngCodec::decode(const std::string& filename, Image& image) {
     std::ifstream file(filename, std::ios::binary);
     if (!file.is_open()) {
         return false;
     }
     
-    // Read entire file
     file.seekg(0, std::ios::end);
     size_t fileSize = file.tellg();
     file.seekg(0, std::ios::beg);
@@ -334,40 +240,33 @@ bool PngCodec::decode(const std::string& filename, Image& image) {
         return false;
     }
     
-    // Verify PNG signature
     if (fileSize < 8 || memcmp(fileData.data(), "\x89PNG\r\n\x1a\n", 8) != 0) {
         std::cerr << "Invalid PNG signature\n";
         return false;
     }
     
-    size_t pos = 8; // after signature
+    size_t pos = 8;
     std::vector<uint8_t> compressedData;
-    int colorType = -1; // set from IHDR
+    int colorType = -1;
     
-    // Parse chunks
     while (pos < fileSize - 12) {
-        // Read chunk length
         if (pos + 4 > fileSize) return false;
         uint32_t chunkLen = (fileData[pos] << 24) | (fileData[pos+1] << 16) | 
                            (fileData[pos+2] << 8) | fileData[pos+3];
         pos += 4;
         
-        // Read chunk type
         if (pos + 4 > fileSize) return false;
         char chunkType[5] = {0};
         memcpy(chunkType, &fileData[pos], 4);
         pos += 4;
         
-        // Read chunk data
         if (pos + chunkLen > fileSize) return false;
         const uint8_t* chunkData = &fileData[pos];
         pos += chunkLen;
         
-        // Read CRC (skip validation here)
         if (pos + 4 > fileSize) return false;
         pos += 4;
         
-        // Handle IHDR
         if (strcmp(chunkType, "IHDR") == 0 && chunkLen == 13) {
             image.width = (chunkData[0] << 24) | (chunkData[1] << 16) | 
                          (chunkData[2] << 8) | chunkData[3];
@@ -377,17 +276,15 @@ bool PngCodec::decode(const std::string& filename, Image& image) {
             if (chunkData[8] != 8 || (chunkData[9] != 2 && chunkData[9] != 6)) {
                 std::cerr << "Unsupported PNG format: bit depth=" << (int)chunkData[8] 
                          << ", color type=" << (int)chunkData[9] << "\n";
-                return false; // Only 8-bit RGB and RGBA are supported
+                return false;
             }
             
-            colorType = chunkData[9]; // store color type
+            colorType = chunkData[9];
             image.data.resize(image.width * image.height * 3);
         }
-        // Handle IDAT - aggregate compressed data
         else if (strcmp(chunkType, "IDAT") == 0) {
             compressedData.insert(compressedData.end(), chunkData, chunkData + chunkLen);
         }
-        // IEND - end of file
         else if (strcmp(chunkType, "IEND") == 0) {
             break;
         }
@@ -397,13 +294,11 @@ bool PngCodec::decode(const std::string& filename, Image& image) {
         return false;
     }
     
-    // Determine number of channels from color type
-    int channels = (colorType == 6) ? 4 : 3; // RGBA=4, RGB=3
+    int channels = (colorType == 6) ? 4 : 3;
     
     std::vector<uint8_t> decompressed;
     
 #ifdef HAVE_ZLIB
-    // zlib decompression
     z_stream strm;
     strm.zalloc = Z_NULL;
     strm.zfree = Z_NULL;
@@ -415,7 +310,7 @@ bool PngCodec::decode(const std::string& filename, Image& image) {
         return false;
     }
     
-    decompressed.resize(image.width * image.height * channels + image.height); // +1 filter byte per row
+    decompressed.resize(image.width * image.height * channels + image.height);
     
     strm.avail_out = decompressed.size();
     strm.next_out = decompressed.data();
@@ -444,34 +339,29 @@ bool PngCodec::decode(const std::string& filename, Image& image) {
         
         for (uint32_t x = 0; x < image.width; ++x) {
             size_t pixelOffset = rowStart + 1 + x * channels;
-            image.data[outPos++] = decompressed[pixelOffset];     // R
-            image.data[outPos++] = decompressed[pixelOffset + 1]; // G
-            image.data[outPos++] = decompressed[pixelOffset + 2]; // B
-            // Skip alpha channel if present
+            image.data[outPos++] = decompressed[pixelOffset];
+            image.data[outPos++] = decompressed[pixelOffset + 1];
+            image.data[outPos++] = decompressed[pixelOffset + 2];
         }
     }
     
     return true;
 }
 
-/*
-English (compare): If sizes differ => UINT64_MAX, else count RGB pixel mismatches.
-Русский (compare): Если размеры различаются — UINT64_MAX, иначе посчитать отличающиеся пиксели.
-*/
 uint64_t PngCodec::compare(const Image& img1, const Image& img2) {
     if (img1.width != img2.width || img1.height != img2.height) {
-        return UINT64_MAX; // Different sizes
+        return UINT64_MAX;
     }
     
     if (img1.data.size() != img2.data.size()) {
-        return UINT64_MAX; // Different data sizes
+        return UINT64_MAX;
     }
     
     uint64_t diffPixels = 0;
     for (size_t i = 0; i < img1.data.size(); i += 3) {
-        if (img1.data[i] != img2.data[i] ||     // R
-            img1.data[i+1] != img2.data[i+1] || // G
-            img1.data[i+2] != img2.data[i+2]) { // B
+        if (img1.data[i] != img2.data[i] ||
+            img1.data[i+1] != img2.data[i+1] ||
+            img1.data[i+2] != img2.data[i+2]) {
             diffPixels++;
         }
     }
