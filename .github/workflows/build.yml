@@ -69,6 +69,23 @@ jobs:
       - name: Build diff tool
         run: cmake --build build --config Release --target imgdiff -j
 
+      - name: Ensure folders (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p result
+          ls -la
+          ls -la examples || true
+          ls -la result || true
+
+      - name: Ensure folders (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path result | Out-Null
+          Get-ChildItem -Force
+          Get-ChildItem -Force examples | Out-Null
+          Get-ChildItem -Force result | Out-Null
+
       - name: Run image diff (Linux/macOS)
         if: runner.os != 'Windows'
         run: ./build/imgdiff
